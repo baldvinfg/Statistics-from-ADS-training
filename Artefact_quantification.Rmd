@@ -1,0 +1,128 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+```{r}
+library(ggplot2)
+library(lawstat)
+library(Hmisc)
+library(dplyr)
+library(stringr)
+library(tidyr)
+```
+
+```{r}
+# Lets read in the data
+# Load the data into R
+Conventional <- read.table("/Users/baldvinfannar/Dropbox/BFG/Skóladót/Cambridge - BS/Af stóru tölvu/Artefact_quantification/Results_conventional.txt", sep= "\t",  stringsAsFactors=F, header=TRUE)
+Fix1 <- read.table("/Users/baldvinfannar/Dropbox/BFG/Skóladót/Cambridge - BS/Af stóru tölvu/Artefact_quantification/Results_fix1.txt", sep= "\t",  stringsAsFactors=F, header=TRUE)
+Fix2 <- read.table("/Users/baldvinfannar/Dropbox/BFG/Skóladót/Cambridge - BS/Af stóru tölvu/Artefact_quantification/Results_fix2.txt", sep= "\t",  stringsAsFactors=F, header=TRUE)
+Fix3 <- read.table("/Users/baldvinfannar/Dropbox/BFG/Skóladót/Cambridge - BS/Af stóru tölvu/Artefact_quantification/Results_fix3.txt", sep= "\t",  stringsAsFactors=F, header=TRUE)
+Fix4 <- read.table("/Users/baldvinfannar/Dropbox/BFG/Skóladót/Cambridge - BS/Af stóru tölvu/Artefact_quantification/Results_fix4.txt", sep= "\t",  stringsAsFactors=F, header=TRUE)
+
+# Let´s add name tags
+Conventional$Fixation = "conventional"
+Fix1$Fixation = "fix1"
+Fix2$Fixation = "fix2"
+Fix3$Fixation = "fix3"
+Fix4$Fixation = "fix4"
+
+# Let's combine the datasets together
+data = rbind(Conventional, Fix1, Fix2, Fix3, Fix4)
+
+# View the first few rows of the dataset
+head(data)
+sum(is.na(data))
+```
+
+```{r}
+# Lets make sure the variables are correctly sorted as numerics and factors
+# Assuming your dataframe is named 'data'
+data$Fixation <- as.factor(data$Fixation)
+data$X.Area <- as.numeric(gsub(",", ".", data$X.Area))
+
+str(data)
+```
+
+```{r}
+# Lets start by getting a feel for my data with some descriptive statistics.
+summary_stats <- data %>%
+  group_by(Fixation) %>%
+  summarise(
+    Mean = mean(X.Area, na.rm = TRUE),
+    SD = sd(X.Area, na.rm = TRUE),
+    Median = median(X.Area, na.rm = TRUE)
+  )
+print(summary_stats)
+```
+
+```{r}
+# Let's visualise this
+ggplot(data, aes(x = Fixation, y = X.Area, fill = Fixation)) +
+  geom_boxplot() +
+  theme_minimal() +
+  labs(title = "Boxplot of Percent Area by Fixation Protocol",
+       x = "Fixation Protocol",
+       y = "Percent Area")
+
+ggsave("/Users/baldvinfannar/Dropbox/BFG/Skóladót/Cambridge - BS/Fixation_comparison_plot1.png", bg = "white", dpi = 300)
+
+data$Fixation <- factor(data$Fixation,
+                        levels = c("conventional", "fix1", "fix2", "fix3", "fix4"),  # original levels
+                        labels = c("Conventional", "Fix 1", "Fix 2", "Fix 3", "Fix 4"))  # new desired labels
+
+ggplot(data, aes(x = Fixation, y = X.Area, fill = Fixation)) +
+  geom_violin(alpha = 0.7, color = "black") +  # Violin plot with custom alpha and border
+  geom_jitter(width = 0.15, size = 1.2, alpha = 0.6, color = "black") +  # Jitter with custom settings
+  scale_fill_brewer(palette = "Set1") +  # Use RColorBrewer color palette
+  scale_y_continuous(expand = c(0, 0), limits = c(0, max(data$X.Area) * 1.05)) +  # Start y-axis at 0 and add buffer at top
+  theme_minimal(base_size = 14) +  # Base font size for better readability
+  labs(
+    title = "Artefact Percent Area by Fixation Protocol",
+    x = "Fixation Protocol",
+    y = "Percent Area"
+  ) +
+  theme(
+    plot.title = element_text(size = 20, face = "bold", hjust = 0.5, margin = margin(b = 10)),  # Title styling with margin
+    axis.title.x = element_text(size = 16, face = "bold", margin = margin(t = 10)),  # X-axis title styling with margin
+    axis.title.y = element_text(size = 16, face = "bold", margin = margin(r = 10)),  # Y-axis title styling with margin
+    axis.text.x = element_text(size = 14, angle = 30, hjust = 1),  # X-axis text styling with angle
+    axis.text.y = element_text(size = 14),  # Y-axis text styling
+    legend.position = "none",  # Hide legend
+    panel.grid.major = element_blank(),  # Remove major grid lines
+    panel.grid.minor = element_blank(),  # Remove minor grid lines
+    panel.background = element_rect(fill = "white", color = NA),  # White background
+    axis.line = element_line(color = "black")  # Add axis lines
+  )
+
+ggsave("/Users/baldvinfannar/Dropbox/BFG/Skóladót/Cambridge - BS/Fixation_comparison_plot2.png", bg = "white", dpi = 300)
+```
+
+```{r}
+# Statistical analysis
+
+# Let's check if the data follows a normal distribution:
+# Test for Normality
+by(data$X.Area, data$Fixation, function(x) shapiro.test(x))
+### We get p-values<0.05, so we reject the null hypothesis and say that data does not follow a normal distribution, so we should perform a non-parametric test
+
+# Kruskal-Wallis Test
+kruskal_result <- kruskal.test(X.Area ~ Fixation, data = data)
+print(kruskal_result)
+
+## EXTRA CODE (spare code)
+## To compare the means of percent area across the four fixation protocols:
+### ANOVA Test if assumptions of normality and homogeneity of variance are met.
+#anova_result <- aov(PercentArea ~ Fixation, data = data)
+#summary(anova_result)
+
+## If ANOVA shows significant differences:
+### Tukey's HSD Test for pairwise comparisons.
+#TukeyHSD(anova_result)
+
+## If assumptions are not met, consider a non-parametric alternative:
+### Kruskal-Wallis Test:
+#kruskal.test(PercentArea ~ Fixation, data = data)
+```
+
